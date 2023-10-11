@@ -41,7 +41,7 @@ sudo yum -y install terraform
 # sudo sed -i 's/home\/ec2-user:\/bin\/bash/home\/ec2-user:\/usr\/bin\/zsh/g' /etc/passwd
 touch ~/.zshrc
 sudo chsh -s $(which zsh) ec2-user
-source ~/.zshrc
+#source ~/.zshrc
 
 #installing Helm
 curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 > get_helm.sh
