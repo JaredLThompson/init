@@ -57,9 +57,10 @@ tar -xzf eksctl_$PLATFORM.tar.gz -C /tmp && rm eksctl_$PLATFORM.tar.gz
 sudo mv /tmp/eksctl /usr/local/bin
 
 # Install ohmyz.sh
+rm install.sh
 wget https://github.com/robbyrussell/oh-my-zsh/raw/master/tools/install.sh
-sed -i.tmp 's:env zsh::g' install.sh
-sed -i.tmp 's:chsh -s .*$::g' install.sh
+sed -i.tmp 's:env zsh:echo removed env zsh:g' install.sh
+sed -i.tmp 's:chsh -s .*$:echo Removed chsh:g' install.sh
 sh install.sh
 
 # Keep ssh sessions alive
