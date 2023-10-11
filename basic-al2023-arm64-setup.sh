@@ -25,7 +25,7 @@ initArch
 #sudo ./aws/install
 
 # install kubectl
-curl -O https://s3.us-west-2.amazonaws.com/amazon-eks/1.28.1/2023-09-14/bin/linux/arm64/kubectl
+curl -O https://s3.us-west-2.amazonaws.com/amazon-eks/1.28.1/2023-09-14/bin/linux/$ARCH/kubectl
 chmod +x ./kubectl
 mkdir -p $HOME/bin && cp ./kubectl $HOME/bin/kubectl && export PATH=$PATH:$HOME/bin
 echo 'export PATH=$PATH:$HOME/bin' >> ~/.bashrc
@@ -50,7 +50,6 @@ chmod 700 get_helm.sh
 
 # Installing eksctl
 # for ARM systems, set ARCH to: `arm64`, `armv6` or `armv7`
-ARCH=arm64
 PLATFORM=$(uname -s)_$ARCH
 curl -sLO "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_$PLATFORM.tar.gz"
 tar -xzf eksctl_$PLATFORM.tar.gz -C /tmp && rm eksctl_$PLATFORM.tar.gz
@@ -58,12 +57,13 @@ tar -xzf eksctl_$PLATFORM.tar.gz -C /tmp && rm eksctl_$PLATFORM.tar.gz
 sudo mv /tmp/eksctl /usr/local/bin
 
 
-# Installing ohmyz.sh
-sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 
 # Keep ssh sessions alive
 echo ServerAliveInterval 50 > ~/.ssh/config
-chmod 400 ~/.ssh/config
+chmod 400 ~/.ssh/configi
+
+#copy .zshrc from repo
+cp .zshrc ~/.zshrc
 
 # Updating Plugins
 sed -i 's/plugins=(git)/plugins=(git aws kubectl)/g' ~/.zshrc
@@ -73,5 +73,9 @@ sed -i 's/robbyrussell/pygmalion/g' ~/.zshrc
 echo 'export PATH=$PATH:$HOME/bin' >> ~/.zshrc
 echo 'alias tf="terraform"' >> ~/.zshrc
 echo 'alias k="kubectl"' >> ~/.zshrc
+
+
+# Installing ohmyz.sh
+sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 
 source ~/.zshrc
