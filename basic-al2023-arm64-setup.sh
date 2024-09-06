@@ -56,6 +56,9 @@ tar -xzf eksctl_$PLATFORM.tar.gz -C /tmp && rm eksctl_$PLATFORM.tar.gz
 #curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
 sudo mv /tmp/eksctl /usr/local/bin
 
+#change shell first
+sudo chsh --shell /usr/bin/zsh ec2-user
+
 # Install ohmyz.sh
 rm install.sh
 wget https://github.com/robbyrussell/oh-my-zsh/raw/master/tools/install.sh
@@ -63,12 +66,6 @@ sed -i.tmp 's:env zsh:echo removed env zsh:g' install.sh
 sed -i.tmp 's:chsh -s .*$:echo Removed chsh:g' install.sh
 sh install.sh
 
-# Keep ssh sessions alive
-echo ServerAliveInterval 50 > ~/.ssh/config
-chmod 400 ~/.ssh/configi
-
-#copy .zshrc from repo
-#cp .zshrc ~/.zshrc
 
 # Updating Plugins
 sed -i 's/plugins=(git)/plugins=(git aws kubectl)/g' ~/.zshrc
@@ -79,6 +76,5 @@ echo 'export PATH=$PATH:$HOME/bin' >> ~/.zshrc
 echo 'alias tf="terraform"' >> ~/.zshrc
 echo 'alias k="kubectl"' >> ~/.zshrc
 
-#Change to zsh
-zsh
+#Refresh shell to zsh
 source ~/.zshrc
