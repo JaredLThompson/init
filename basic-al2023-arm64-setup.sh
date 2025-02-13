@@ -20,9 +20,6 @@ initArch() {
 
 initArch
 
-#curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-#unzip awscliv2.zip
-#sudo ./aws/install
 
 # install kubectl
 curl -O https://s3.us-west-2.amazonaws.com/amazon-eks/1.28.1/2023-09-14/bin/linux/$ARCH/kubectl
@@ -37,11 +34,8 @@ sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinu
 sudo yum -y install terraform
 
 # Change shell to zsh
-# chsh -s $(which zsh)
-# sudo sed -i 's/home\/ec2-user:\/bin\/bash/home\/ec2-user:\/usr\/bin\/zsh/g' /etc/passwd
 touch ~/.zshrc
 sudo chsh -s $(which zsh) ec2-user
-#source ~/.zshrc
 
 #installing Helm
 curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 > get_helm.sh
@@ -53,22 +47,11 @@ chmod 700 get_helm.sh
 PLATFORM=$(uname -s)_$ARCH
 curl -sLO "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_$PLATFORM.tar.gz"
 tar -xzf eksctl_$PLATFORM.tar.gz -C /tmp && rm eksctl_$PLATFORM.tar.gz
-#curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
 sudo mv /tmp/eksctl /usr/local/bin
 
 # Install ohmyz.sh
 rm install.sh
-wget https://github.com/robbyrussell/oh-my-zsh/raw/master/tools/install.sh
-sed -i.tmp 's:env zsh:echo removed env zsh:g' install.sh
-sed -i.tmp 's:chsh -s .*$:echo Removed chsh:g' install.sh
-sh install.sh
-
-# Keep ssh sessions alive
-echo ServerAliveInterval 50 > ~/.ssh/config
-chmod 400 ~/.ssh/configi
-
-#copy .zshrc from repo
-#cp .zshrc ~/.zshrc
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 
 # Updating Plugins
 sed -i 's/plugins=(git)/plugins=(git aws kubectl)/g' ~/.zshrc
