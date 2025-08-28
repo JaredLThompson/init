@@ -92,15 +92,19 @@ function get_instance_tag() {
     TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null)
 
     # Use token to get the tag value (replace TAG_KEY with your desired tag name)
-    TAG_VALUE=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" \
+    TAG_VALUE=$(curl -s -f -H "X-aws-ec2-metadata-token: $TOKEN" \
         http://169.254.169.254/latest/meta-data/tags/instance/$TAG_KEY 2>/dev/null)
-
-    echo "$TAG_VALUE" > "$CACHE_FILE"
-    echo "$TAG_VALUE"
+    
+    # Only cache and display if we got a valid response
+    if [ ! -z "$TAG_VALUE" ]; then
+        echo "$TAG_VALUE" > "$CACHE_FILE"
+        echo "$TAG_VALUE"
+    fi
 }
 
 # Update PROMPT to include instance tag
-PROMPT='%{$fg[green]%}[$(get_instance_tag)]%{$reset_color%} '$PROMPT
+# PROMPT='%{$fg[green]%}[$(get_instance_tag)]%{$reset_color%} '$PROMPT
+PROMPT='$(tag=$(get_instance_tag); if [ ! -z "$tag" ]; then echo "%{$fg[green]%}[$tag]%{$reset_color%} "; fi)'$PROMPT
 EOF
 
 echo "Function has been added to ~/.zshrc"
