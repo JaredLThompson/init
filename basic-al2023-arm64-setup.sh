@@ -62,6 +62,50 @@ echo 'export PATH=$PATH:$HOME/bin' >> ~/.zshrc
 echo 'alias tf="terraform"' >> ~/.zshrc
 echo 'alias k="kubectl"' >> ~/.zshrc
 
+# Add tagging from EC2 Instance Metadata to the prompt
+cat << 'EOF' >> ~/.zshrc
+
+# AWS Instance Metadata Tag Function
+function get_instance_tag() {
+    # Cache file location
+    TAG_KEY="console-name"
+    CACHE_FILE="/tmp/instance_tag_cache"
+    CURRENT_TIME=$(date +%s)
+
+    # Check if cache exists and is less than 1 hour old
+    if [ -f "$CACHE_FILE" ]; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            FILE_TIME=$(stat -f %m "$CACHE_FILE")
+        else
+            # Linux
+            FILE_TIME=$(stat -c %Y "$CACHE_FILE")
+        fi
+
+        if (( CURRENT_TIME - FILE_TIME < 3600 )); then
+            cat "$CACHE_FILE"
+            return
+        fi
+    fi
+
+    # Get IMDSv2 token
+    TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null)
+
+    # Use token to get the tag value (replace TAG_KEY with your desired tag name)
+    TAG_VALUE=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" \
+        http://169.254.169.254/latest/meta-data/tags/instance/$TAG_KEY 2>/dev/null)
+
+    echo "$TAG_VALUE" > "$CACHE_FILE"
+    echo "$TAG_VALUE"
+}
+
+# Update PROMPT to include instance tag
+PROMPT='%{$fg[green]%}[$(get_instance_tag)]%{$reset_color%} '$PROMPT
+EOF
+
+echo "Function has been added to ~/.zshrc"
+
+
 #Change to zsh
 zsh
 source ~/.zshrc
