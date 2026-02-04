@@ -40,8 +40,10 @@ log "Install base packages"
 # Notes:
 # - `software-properties-common` is often not present on Raspberry Pi OS; we intentionally do NOT install it.
 # - `ripgrep` package name is `ripgrep`; `fd-find` provides `fdfind` binary on Debian.
+sudo apt-get install -y zsh
+sudo apt-get install -y pipx
+
 sudo apt-get install -y \
-  zsh \
   git \
   vim \
   curl \
@@ -78,8 +80,16 @@ log "Enable SSH (safe default; harmless if already enabled)"
 sudo systemctl enable ssh >/dev/null 2>&1 || true
 sudo systemctl start ssh  >/dev/null 2>&1 || true
 
-log "Upgrade pip tooling (user-level)"
-python3 -m pip install --user --upgrade pip setuptools wheel
+log "Set up pipx (Python CLI tools in isolated envs)"
+python3 -m pipx ensurepath || true
+# ensurepath updates shell rc; also add ~/.local/bin to PATH in .zshrc (we already do)
+
+# Install useful Python CLIs (safe, isolated)
+pipx install ruff || pipx upgrade ruff
+pipx install black || pipx upgrade black
+pipx install ipython || pipx upgrade ipython
+pipx install pytest || pipx upgrade pytest
+
 
 log "Install Oh My Zsh (unattended)"
 if [[ ! -d "${HOME_DIR}/.oh-my-zsh" ]]; then
