@@ -50,7 +50,6 @@ sudo apt-get install -y \
   rsync \
   screen \
   psmisc \
-  software-properties-common \
   build-essential \
   make \
   cmake \
