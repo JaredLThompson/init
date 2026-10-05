@@ -323,8 +323,24 @@ fi
 # AWS CLI v2
 # ---------------------------------------------------------------------------
 if [[ "${SKIP_AWSCLI:-0}" != "1" ]]; then
-  if command -v aws >/dev/null 2>&1; then
-    log "AWS CLI already installed: $(aws --version 2>&1)"
+  # Detect an existing install independent of the current PATH. The AWS CLI v2
+  # installer symlinks the binary into /usr/local/bin (default --bin-dir) and
+  # keeps the real binary under /usr/local/aws-cli/v2/current/bin. A non-login
+  # shell may not have /usr/local/bin on PATH, so check the known locations.
+  aws_bin=""
+  for cand in \
+    "$(command -v aws 2>/dev/null || true)" \
+    /usr/local/bin/aws \
+    /usr/local/aws-cli/v2/current/bin/aws
+  do
+    if [[ -n "$cand" && -x "$cand" ]]; then
+      aws_bin="$cand"
+      break
+    fi
+  done
+
+  if [[ -n "$aws_bin" ]]; then
+    log "AWS CLI already installed: $("$aws_bin" --version 2>&1)"
   elif [[ "$ARCH" == "amd64" || "$ARCH" == "arm64" ]]; then
     log "Install AWS CLI v2"
     case "$ARCH" in
