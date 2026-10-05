@@ -347,14 +347,27 @@ if [[ "${SKIP_AWSCLI:-0}" != "1" ]]; then
       amd64) awscli_arch="x86_64" ;;
       arm64) awscli_arch="aarch64" ;;
     esac
+
+    # Self-heal: a prior interrupted install can leave a version directory
+    # under /usr/local/aws-cli/v2/ with no runnable binary and no 'current'
+    # symlink. The installer's --update then sees "same version" and skips
+    # forever, never repairing it. If we got here, no runnable binary was
+    # found, so if an install tree exists it is broken -> remove it and do a
+    # clean install (without --update).
+    install_mode="--update"
+    if [[ -d /usr/local/aws-cli ]] && [[ ! -x /usr/local/aws-cli/v2/current/bin/aws ]]; then
+      warn "Found a broken AWS CLI install tree; removing it for a clean reinstall"
+      sudo rm -rf /usr/local/aws-cli /usr/local/bin/aws
+      install_mode=""
+    fi
+
     tmpd="$(mktemp -d)"
     fetch "https://awscli.amazonaws.com/awscli-exe-linux-${awscli_arch}.zip" "${tmpd}/awscliv2.zip"
     log "Unzipping AWS CLI bundle..."
     unzip -q "${tmpd}/awscliv2.zip" -d "${tmpd}"
     log "Running AWS CLI installer (this can take several minutes on a Pi)..."
-    if sudo "${tmpd}/aws/install" --update; then
-      :
-    else
+    # shellcheck disable=SC2086  # install_mode is intentionally unquoted (may be empty)
+    if ! sudo "${tmpd}/aws/install" $install_mode; then
       warn "AWS CLI installer exited non-zero; check output above"
     fi
     rm -rf "${tmpd}"
