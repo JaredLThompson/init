@@ -18,6 +18,8 @@ under [`archive/`](archive/)).
 - **Terraform** (from the correct HashiCorp repo for the distro)
 - Aliases `tf` -> `terraform`, `k` -> `kubectl`
 - An EC2 IMDSv2 prompt function that shows the instance's `console-name` tag
+  (added **only when running on EC2**, detected automatically; uses IMDSv2
+  tokens, never IMDSv1)
 - SSH keepalive (`ServerAliveInterval 50`)
 - Sets the login user's default shell to zsh
 
@@ -57,6 +59,8 @@ variable. Run `./setup.sh --help` for the built-in menu.
 | `--skip-terraform` | `SKIP_TERRAFORM=1` | Skip Terraform |
 | `--skip-awscli` | `SKIP_AWSCLI=1` | Skip AWS CLI v2 |
 | `--skip-extras` | `SKIP_EXTRAS=1` | Skip extra utilities (tcpdump, mtr, jq, vim, ...) |
+| `--imds` | `FORCE_IMDS=1` | Force-add the EC2 instance-tag prompt (even off-EC2) |
+| `--no-imds` | `SKIP_IMDS=1` | Never add the EC2 instance-tag prompt |
 | `--skip-chsh` | `SKIP_CHSH=1` | Don't change the default shell to zsh |
 
 Example:

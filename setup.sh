@@ -51,10 +51,16 @@ OPTIONS:
                      Skip Terraform.
       --skip-awscli  Skip AWS CLI v2.
       --skip-extras  Skip extra utilities (tcpdump, mtr, jq, vim, ...).
+      --imds         Force-add the EC2 instance-tag prompt (even off-EC2).
+      --no-imds      Never add the EC2 instance-tag prompt.
       --skip-chsh    Don't change the default shell to zsh.
 
+By default the EC2 instance-tag prompt is added only when running on an EC2
+instance (detected via DMI identifiers and an IMDSv2 token request).
+
 Each option has an equivalent environment variable (set to 1):
-  SKIP_K8S  SKIP_HELM  SKIP_EKSCTL  SKIP_TERRAFORM  SKIP_AWSCLI  SKIP_EXTRAS  SKIP_CHSH
+  SKIP_K8S  SKIP_HELM  SKIP_EKSCTL  SKIP_TERRAFORM  SKIP_AWSCLI  SKIP_EXTRAS
+  FORCE_IMDS  SKIP_IMDS  SKIP_CHSH
 
 EXAMPLES:
   ./setup.sh                              # full install
@@ -75,6 +81,8 @@ while [[ $# -gt 0 ]]; do
     --skip-terraform) SKIP_TERRAFORM=1 ;;
     --skip-awscli)    SKIP_AWSCLI=1 ;;
     --skip-extras)    SKIP_EXTRAS=1 ;;
+    --imds)           FORCE_IMDS=1 ;;
+    --no-imds)        SKIP_IMDS=1 ;;
     --skip-chsh)      SKIP_CHSH=1 ;;
     *) printf 'Unknown option: %s\n\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
@@ -185,6 +193,36 @@ fetch() {
 fetch_quiet() {
   # fetch_quiet <url>
   curl -fsL --connect-timeout 15 --max-time 60 --retry 3 --retry-delay 2 "$1"
+}
+
+# ---------------------------------------------------------------------------
+# EC2 detection.
+# Two cheap, independent signals (either is sufficient):
+#   1) DMI identifiers — present on EC2 without any network call. Nitro
+#      instances report "Amazon EC2" as the sys-vendor/board-vendor; older
+#      Xen instances have a hypervisor UUID starting with "ec2".
+#   2) IMDS reachability — a short-timeout IMDSv2 token request succeeds only
+#      on an instance (link-local 169.254.169.254).
+# ---------------------------------------------------------------------------
+is_ec2() {
+  # DMI check (no network).
+  local dmi
+  for dmi in /sys/class/dmi/id/sys_vendor \
+             /sys/class/dmi/id/board_vendor \
+             /sys/class/dmi/id/bios_vendor; do
+    if [[ -r "$dmi" ]] && grep -qi 'amazon' "$dmi" 2>/dev/null; then
+      return 0
+    fi
+  done
+  if [[ -r /sys/hypervisor/uuid ]] && grep -qi '^ec2' /sys/hypervisor/uuid 2>/dev/null; then
+    return 0
+  fi
+  # IMDS check (fast fail off-instance).
+  local token
+  token=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+            --connect-timeout 1 --max-time 2 \
+            -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)
+  [[ -n "$token" ]]
 }
 
 # ---------------------------------------------------------------------------
@@ -381,10 +419,27 @@ fi
 append_once "$BASHRC" 'export PATH="$HOME/.local/bin:$HOME/bin:$PATH"'
 
 # ---------------------------------------------------------------------------
-# EC2 IMDS tag -> prompt (guarded block)
+# EC2 IMDS tag -> prompt (guarded block, only on EC2)
 # ---------------------------------------------------------------------------
-log "Add EC2 instance-tag prompt function"
-if ! grep -q '### INIT_IMDS_START' "$ZSHRC"; then
+# Decide whether to add the IMDS prompt function. By default we add it only
+# when running on an EC2 instance, so non-EC2 hosts (e.g. a Raspberry Pi)
+# don't carry a prompt hook that queries a link-local address they can't
+# reach. Override with FORCE_IMDS=1 (--imds) or disable with SKIP_IMDS=1
+# (--no-imds).
+add_imds=0
+if [[ "${SKIP_IMDS:-0}" == "1" ]]; then
+  log "SKIP_IMDS set; not adding EC2 instance-tag prompt"
+elif [[ "${FORCE_IMDS:-0}" == "1" ]]; then
+  log "FORCE_IMDS set; adding EC2 instance-tag prompt regardless of host"
+  add_imds=1
+elif is_ec2; then
+  log "EC2 instance detected; adding instance-tag prompt function"
+  add_imds=1
+else
+  log "Not an EC2 instance; skipping instance-tag prompt (use --imds to force)"
+fi
+
+if [[ "$add_imds" -eq 1 ]] && ! grep -q '### INIT_IMDS_START' "$ZSHRC"; then
   cat <<'EOF' >> "$ZSHRC"
 
 ### INIT_IMDS_START
@@ -406,11 +461,17 @@ function get_instance_tag() {
         fi
     fi
 
+    # IMDSv2 only: first obtain a session token (PUT), then send it on the
+    # metadata request. We never fall back to unauthenticated IMDSv1.
     # Short timeouts: on a non-EC2 host (e.g. a Pi) 169.254.169.254 is not
     # reachable; without these the prompt would stall on every render.
-    TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" \
+    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
         --connect-timeout 1 --max-time 2 \
         -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null)
+
+    # No token -> not reachable or IMDS disabled; do not attempt IMDSv1.
+    [ -z "$TOKEN" ] && return
+
     TAG_VALUE=$(curl -s -f --connect-timeout 1 --max-time 2 \
         -H "X-aws-ec2-metadata-token: $TOKEN" \
         "http://169.254.169.254/latest/meta-data/tags/instance/$TAG_KEY" 2>/dev/null)
