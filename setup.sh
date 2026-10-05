@@ -50,10 +50,11 @@ OPTIONS:
       --skip-terraform
                      Skip Terraform.
       --skip-awscli  Skip AWS CLI v2.
+      --skip-extras  Skip extra utilities (tcpdump, mtr, jq, vim, ...).
       --skip-chsh    Don't change the default shell to zsh.
 
 Each option has an equivalent environment variable (set to 1):
-  SKIP_K8S  SKIP_HELM  SKIP_EKSCTL  SKIP_TERRAFORM  SKIP_AWSCLI  SKIP_CHSH
+  SKIP_K8S  SKIP_HELM  SKIP_EKSCTL  SKIP_TERRAFORM  SKIP_AWSCLI  SKIP_EXTRAS  SKIP_CHSH
 
 EXAMPLES:
   ./setup.sh                              # full install
@@ -73,6 +74,7 @@ while [[ $# -gt 0 ]]; do
     --skip-eksctl)    SKIP_EKSCTL=1 ;;
     --skip-terraform) SKIP_TERRAFORM=1 ;;
     --skip-awscli)    SKIP_AWSCLI=1 ;;
+    --skip-extras)    SKIP_EXTRAS=1 ;;
     --skip-chsh)      SKIP_CHSH=1 ;;
     *) printf 'Unknown option: %s\n\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
@@ -186,11 +188,12 @@ case "$FAMILY" in
     # 'curl-minimal' by default, which provides the curl binary; pulling in
     # 'curl' triggers an unresolvable conflict with 'curl-minimal'.
     # util-linux-user provides chsh on AL2023/AL2.
-    pkg_install zsh git vim tar gzip unzip util-linux-user
+    # (vim lives in the best-effort extras group below, since the RHEL
+    #  package is 'vim-enhanced' and may be absent on minimal images.)
+    pkg_install zsh git tar gzip unzip util-linux-user
     ;;
   debian)
-    pkg_install zsh git vim wget unzip ca-certificates gnupg \
-                openssh-client net-tools dnsutils iproute2 iputils-ping
+    pkg_install zsh git unzip ca-certificates gnupg openssh-client
     ;;
 esac
 
@@ -199,6 +202,30 @@ esac
 if ! command -v curl >/dev/null 2>&1; then
   warn "curl not found; attempting to install it"
   pkg_install curl || die "curl is required but could not be installed"
+fi
+
+# ---------------------------------------------------------------------------
+# Extra utilities (best-effort: a missing package warns but never aborts).
+# Package names differ between families, so map them per-family.
+# ---------------------------------------------------------------------------
+if [[ "${SKIP_EXTRAS:-0}" != "1" ]]; then
+  log "Install extra utilities (best-effort)"
+  case "$FAMILY" in
+    rhel)
+      EXTRAS=(vim-enhanced tcpdump mtr traceroute bind-utils nmap-ncat jq htop tmux rsync wget)
+      ;;
+    debian)
+      # mtr -> mtr-tiny (avoids GTK/X11 deps); nc -> netcat-openbsd; dig -> dnsutils.
+      EXTRAS=(vim tcpdump mtr-tiny traceroute dnsutils netcat-openbsd jq htop tmux rsync wget \
+              net-tools iproute2 iputils-ping)
+      ;;
+  esac
+  # Install individually so one unavailable package can't block the rest.
+  for pkg in "${EXTRAS[@]}"; do
+    pkg_install "$pkg" || warn "optional package '$pkg' not installed (skipping)"
+  done
+else
+  log "SKIP_EXTRAS set; skipping extra utilities"
 fi
 
 # ---------------------------------------------------------------------------

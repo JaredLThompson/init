@@ -7,7 +7,10 @@ under [`archive/`](archive/)).
 ## What it installs
 
 - **zsh** + **oh-my-zsh** (theme `pygmalion`, plugins `git aws kubectl`)
-- **git**, **vim**, plus base networking/utility packages
+- **git** + base packages (tar, gzip, unzip, ca-certificates, openssh, ...)
+- **Extra utilities** (best-effort; per-distro package names handled):
+  `vim`, `tcpdump`, `mtr`, `traceroute`, dig/`nslookup`, `nc` (netcat),
+  `jq`, `htop`, `tmux`, `rsync`, `wget`
 - **AWS CLI v2**
 - **kubectl** (latest stable, per-arch)
 - **Helm 3**
@@ -53,6 +56,7 @@ variable. Run `./setup.sh --help` for the built-in menu.
 | `--skip-eksctl` | `SKIP_EKSCTL=1` | Skip eksctl only |
 | `--skip-terraform` | `SKIP_TERRAFORM=1` | Skip Terraform |
 | `--skip-awscli` | `SKIP_AWSCLI=1` | Skip AWS CLI v2 |
+| `--skip-extras` | `SKIP_EXTRAS=1` | Skip extra utilities (tcpdump, mtr, jq, vim, ...) |
 | `--skip-chsh` | `SKIP_CHSH=1` | Don't change the default shell to zsh |
 
 Example:
