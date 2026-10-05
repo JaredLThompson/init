@@ -1,1 +1,5 @@
 kiro.json
+
+# AWS CLI v2 installer artifacts (unpacked by the bootstrap script)
+awscliv2.zip
+aws/
