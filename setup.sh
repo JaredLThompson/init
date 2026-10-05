@@ -129,14 +129,24 @@ pkg_update
 log "Install base packages"
 case "$FAMILY" in
   rhel)
+    # NOTE: do NOT install the full 'curl' package. AL2023/recent RHEL ship
+    # 'curl-minimal' by default, which provides the curl binary; pulling in
+    # 'curl' triggers an unresolvable conflict with 'curl-minimal'.
     # util-linux-user provides chsh on AL2023/AL2.
-    pkg_install zsh git vim curl tar gzip unzip util-linux-user
+    pkg_install zsh git vim tar gzip unzip util-linux-user
     ;;
   debian)
-    pkg_install zsh git vim curl wget unzip ca-certificates gnupg \
+    pkg_install zsh git vim wget unzip ca-certificates gnupg \
                 openssh-client net-tools dnsutils iproute2 iputils-ping
     ;;
 esac
+
+# curl is required below. It's present on virtually all base images (via
+# curl-minimal on RHEL). Only try to install it if the binary is missing.
+if ! command -v curl >/dev/null 2>&1; then
+  warn "curl not found; attempting to install it"
+  pkg_install curl || die "curl is required but could not be installed"
+fi
 
 # ---------------------------------------------------------------------------
 # AWS CLI v2
