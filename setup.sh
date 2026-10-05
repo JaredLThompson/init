@@ -166,6 +166,28 @@ pkg_install() {
 }
 
 # ---------------------------------------------------------------------------
+# Hardened download helper.
+# curl with no timeout can hang indefinitely on a stalled connection (common
+# on Pis with flaky WiFi / IPv6 black-holes). These flags make a stuck fetch
+# fail fast and retry, and show progress so a slow download isn't mistaken
+# for a hang.
+#   --connect-timeout 15 : give up establishing the TCP connection after 15s
+#   --max-time 600       : hard cap the whole transfer at 10 min
+#   --retry 3            : retry transient failures (with backoff)
+#   -fL --progress-bar   : fail on HTTP errors, follow redirects, show progress
+# ---------------------------------------------------------------------------
+fetch() {
+  # fetch <url> <output-path>
+  curl -fL --connect-timeout 15 --max-time 600 --retry 3 --retry-delay 2 \
+       --progress-bar "$1" -o "$2"
+}
+# Quiet variant for tiny responses (e.g. version strings).
+fetch_quiet() {
+  # fetch_quiet <url>
+  curl -fsL --connect-timeout 15 --max-time 60 --retry 3 --retry-delay 2 "$1"
+}
+
+# ---------------------------------------------------------------------------
 # Idempotent "append line to file if missing"
 # ---------------------------------------------------------------------------
 append_once() {
@@ -241,7 +263,7 @@ if [[ "${SKIP_AWSCLI:-0}" != "1" ]]; then
       arm64) awscli_arch="aarch64" ;;
     esac
     tmpd="$(mktemp -d)"
-    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${awscli_arch}.zip" -o "${tmpd}/awscliv2.zip"
+    fetch "https://awscli.amazonaws.com/awscli-exe-linux-${awscli_arch}.zip" "${tmpd}/awscliv2.zip"
     unzip -q "${tmpd}/awscliv2.zip" -d "${tmpd}"
     sudo "${tmpd}/aws/install" --update
     rm -rf "${tmpd}"
@@ -256,14 +278,13 @@ fi
 mkdir -p "${HOME_DIR}/bin"
 if [[ "${SKIP_K8S:-0}" != "1" && "${K8S_ARCH_OK}" -eq 1 ]]; then
   log "Install kubectl (latest stable)"
-  kver="$(curl -L -s https://dl.k8s.io/release/stable.txt)"
-  curl -fsSLo "${HOME_DIR}/bin/kubectl" \
-    "https://dl.k8s.io/release/${kver}/bin/linux/${ARCH}/kubectl"
+  kver="$(fetch_quiet https://dl.k8s.io/release/stable.txt)"
+  fetch "https://dl.k8s.io/release/${kver}/bin/linux/${ARCH}/kubectl" "${HOME_DIR}/bin/kubectl"
   chmod +x "${HOME_DIR}/bin/kubectl"
 
   if [[ "${SKIP_HELM:-0}" != "1" ]]; then
     log "Install Helm"
-    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 -o /tmp/get_helm.sh
+    fetch https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 /tmp/get_helm.sh
     chmod 700 /tmp/get_helm.sh
     /tmp/get_helm.sh
     rm -f /tmp/get_helm.sh
@@ -274,8 +295,7 @@ if [[ "${SKIP_K8S:-0}" != "1" && "${K8S_ARCH_OK}" -eq 1 ]]; then
   if [[ "${SKIP_EKSCTL:-0}" != "1" ]]; then
     log "Install eksctl (latest)"
     PLATFORM="$(uname -s)_${ARCH}"
-    curl -fsSLo /tmp/eksctl.tar.gz \
-      "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_${PLATFORM}.tar.gz"
+    fetch "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_${PLATFORM}.tar.gz" /tmp/eksctl.tar.gz
     tar -xzf /tmp/eksctl.tar.gz -C /tmp && rm -f /tmp/eksctl.tar.gz
     sudo mv /tmp/eksctl /usr/local/bin/
   else
@@ -386,9 +406,13 @@ function get_instance_tag() {
         fi
     fi
 
+    # Short timeouts: on a non-EC2 host (e.g. a Pi) 169.254.169.254 is not
+    # reachable; without these the prompt would stall on every render.
     TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" \
+        --connect-timeout 1 --max-time 2 \
         -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null)
-    TAG_VALUE=$(curl -s -f -H "X-aws-ec2-metadata-token: $TOKEN" \
+    TAG_VALUE=$(curl -s -f --connect-timeout 1 --max-time 2 \
+        -H "X-aws-ec2-metadata-token: $TOKEN" \
         "http://169.254.169.254/latest/meta-data/tags/instance/$TAG_KEY" 2>/dev/null)
 
     if [ -n "$TAG_VALUE" ]; then
