@@ -349,9 +349,23 @@ if [[ "${SKIP_AWSCLI:-0}" != "1" ]]; then
     esac
     tmpd="$(mktemp -d)"
     fetch "https://awscli.amazonaws.com/awscli-exe-linux-${awscli_arch}.zip" "${tmpd}/awscliv2.zip"
+    log "Unzipping AWS CLI bundle..."
     unzip -q "${tmpd}/awscliv2.zip" -d "${tmpd}"
-    sudo "${tmpd}/aws/install" --update
+    log "Running AWS CLI installer (this can take several minutes on a Pi)..."
+    if sudo "${tmpd}/aws/install" --update; then
+      :
+    else
+      warn "AWS CLI installer exited non-zero; check output above"
+    fi
     rm -rf "${tmpd}"
+    # Verify the install actually produced a runnable binary.
+    if [[ -x /usr/local/bin/aws ]]; then
+      log "AWS CLI installed: $(/usr/local/bin/aws --version 2>&1)"
+    elif [[ -x /usr/local/aws-cli/v2/current/bin/aws ]]; then
+      log "AWS CLI installed: $(/usr/local/aws-cli/v2/current/bin/aws --version 2>&1)"
+    else
+      warn "AWS CLI install did not produce a binary at the expected location"
+    fi
   else
     warn "AWS CLI v2 has no build for arch '${ARCH}'; skipping."
   fi
