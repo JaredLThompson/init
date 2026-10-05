@@ -236,6 +236,37 @@ append_once() {
 }
 
 # ---------------------------------------------------------------------------
+# Remove a previously-injected sentinel block (inclusive of start/end markers)
+# plus one blank line directly above it (we prepend one when injecting).
+# Writes a timestamped .bak first.
+# ---------------------------------------------------------------------------
+remove_sentinel_block() {
+  # remove_sentinel_block <file> <start-marker> <end-marker>
+  local file="$1" start="$2" end="$3"
+  [[ -f "$file" ]] || return 0
+  grep -qF -- "$start" "$file" || return 0
+  # Always back up BEFORE modifying. If the backup can't be written, do not
+  # touch the original.
+  local backup
+  backup="${file}.bak.$(date +%Y%m%d%H%M%S)"
+  if ! cp "$file" "$backup"; then
+    warn "could not back up ${file}; leaving it unchanged"
+    return 1
+  fi
+  awk -v s="$start" -v e="$end" '
+    # Buffer blank lines so we can drop the one just before the start marker.
+    {
+      if ($0 == s) { blank=0; skip=1; next }     # drop pending blank, start skipping
+      if (skip)    { if ($0 == e) skip=0; next }  # inside block (incl. end marker)
+      if ($0 == "") { blank++; next }             # hold blank lines
+      while (blank>0) { print ""; blank-- }       # flush held blanks
+      print
+    }
+    END { while (blank>0) { print ""; blank-- } }
+  ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+}
+
+# ---------------------------------------------------------------------------
 # Base packages
 # ---------------------------------------------------------------------------
 log "Update package metadata / upgrade"
@@ -439,8 +470,9 @@ else
   log "Not an EC2 instance; skipping instance-tag prompt (use --imds to force)"
 fi
 
-if [[ "$add_imds" -eq 1 ]] && ! grep -q '### INIT_IMDS_START' "$ZSHRC"; then
-  cat <<'EOF' >> "$ZSHRC"
+if [[ "$add_imds" -eq 1 ]]; then
+  if ! grep -q '### INIT_IMDS_START' "$ZSHRC"; then
+    cat <<'EOF' >> "$ZSHRC"
 
 ### INIT_IMDS_START
 # Show an EC2 instance tag (console-name) in the prompt, if present.
@@ -484,6 +516,17 @@ function get_instance_tag() {
 PROMPT='$(tag=$(get_instance_tag); if [ -n "$tag" ]; then echo "%{$fg[green]%}[$tag]%{$reset_color%} "; fi)'$PROMPT
 ### INIT_IMDS_END
 EOF
+    log "Instance-tag prompt added to ${ZSHRC}"
+  else
+    log "Instance-tag prompt already present in ${ZSHRC}"
+  fi
+else
+  # Not adding IMDS -> remove any block a previous run (or older script
+  # version) injected, so non-EC2 hosts don't keep a stale prompt hook.
+  if grep -q '### INIT_IMDS_START' "$ZSHRC" 2>/dev/null; then
+    remove_sentinel_block "$ZSHRC" '### INIT_IMDS_START' '### INIT_IMDS_END'
+    log "Removed stale instance-tag prompt block from ${ZSHRC} (backup saved)"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
