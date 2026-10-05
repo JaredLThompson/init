@@ -56,7 +56,8 @@ OPTIONS:
       --skip-chsh    Don't change the default shell to zsh.
 
 By default the EC2 instance-tag prompt is added only when running on an EC2
-instance (detected via DMI identifiers and an IMDSv2 token request).
+instance (detected via DMI / hypervisor identity, not IMDS reachability --
+a managed/hybrid SSM endpoint can serve a token on non-EC2 hosts).
 
 Each option has an equivalent environment variable (set to 1):
   SKIP_K8S  SKIP_HELM  SKIP_EKSCTL  SKIP_TERRAFORM  SKIP_AWSCLI  SKIP_EXTRAS
@@ -197,43 +198,34 @@ fetch_quiet() {
 
 # ---------------------------------------------------------------------------
 # EC2 detection.
-# Two cheap, independent signals (either is sufficient):
-#   1) DMI identifiers — present on EC2 without any network call. Nitro
-#      instances report "Amazon EC2" as the sys-vendor/board-vendor; older
-#      Xen instances have a hypervisor UUID starting with "ec2".
-#   2) IMDS reachability — a short-timeout IMDSv2 token request succeeds only
-#      on an instance (link-local 169.254.169.254).
+# The AUTHORITATIVE signal is DMI / hypervisor identity, which a network
+# route cannot spoof:
+#   - Nitro instances: /sys/class/dmi/id/{sys,board,bios}_vendor contain
+#     "Amazon EC2" (or product_version/board_asset_tag mention EC2).
+#   - Older Xen instances: /sys/hypervisor/uuid starts with "ec2".
+#
+# IMDS reachability is deliberately NOT used as a positive signal: a real
+# IMDSv2 token can be served on 169.254.169.254 by a proxy, VPN route, or a
+# local IMDS emulator even on hardware that is clearly not EC2 (observed on a
+# Raspberry Pi returning a valid 56-char token). Trusting it caused a false
+# positive. Users who intentionally tunnel IMDS can force the behavior with
+# FORCE_IMDS=1 / --imds.
 # ---------------------------------------------------------------------------
 is_ec2() {
-  # DMI check (no network).
-  local dmi
-  for dmi in /sys/class/dmi/id/sys_vendor \
-             /sys/class/dmi/id/board_vendor \
-             /sys/class/dmi/id/bios_vendor; do
-    if [[ -r "$dmi" ]] && grep -qi 'amazon' "$dmi" 2>/dev/null; then
+  local f
+  for f in /sys/class/dmi/id/sys_vendor \
+           /sys/class/dmi/id/board_vendor \
+           /sys/class/dmi/id/bios_vendor \
+           /sys/class/dmi/id/product_version \
+           /sys/class/dmi/id/board_asset_tag; do
+    if [[ -r "$f" ]] && grep -qiE 'amazon( ec2)?|ec2' "$f" 2>/dev/null; then
       return 0
     fi
   done
   if [[ -r /sys/hypervisor/uuid ]] && grep -qi '^ec2' /sys/hypervisor/uuid 2>/dev/null; then
     return 0
   fi
-  # IMDS check (fast fail off-instance). Be strict: a non-empty body is NOT
-  # enough -- captive portals, proxies, or a link-local route (e.g. WireGuard
-  # catching 169.254.0.0/16) can answer with HTML/other content. Require an
-  # HTTP 200 AND a response that actually looks like an IMDSv2 token
-  # (reasonably long, single line, no whitespace or HTML markup).
-  local token http_code tokfile
-  tokfile="$(mktemp)"
-  http_code=$(curl -s -o "$tokfile" -w '%{http_code}' \
-            -X PUT "http://169.254.169.254/latest/api/token" \
-            --connect-timeout 1 --max-time 2 \
-            -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null) || true
-  token="$(cat "$tokfile" 2>/dev/null)"
-  rm -f "$tokfile"
-  [[ "$http_code" == "200" ]] || return 1
-  # Token must be a single whitespace-free line of plausible length and must
-  # not contain '<' (would indicate an HTML error/portal page).
-  [[ "$token" =~ ^[A-Za-z0-9+/=_-]{20,}$ ]]
+  return 1
 }
 
 # ---------------------------------------------------------------------------
