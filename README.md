@@ -43,17 +43,23 @@ lines.
 
 ### Optional toggles
 
-| Variable | Effect |
-|----------|--------|
-| `SKIP_K8S=1` | Skip kubectl, Helm, eksctl |
-| `SKIP_TERRAFORM=1` | Skip Terraform |
-| `SKIP_AWSCLI=1` | Skip AWS CLI v2 |
-| `SKIP_CHSH=1` | Don't change the default shell to zsh |
+Each toggle is available as a command-line flag or an equivalent environment
+variable. Run `./setup.sh --help` for the built-in menu.
+
+| Flag | Variable | Effect |
+|------|----------|--------|
+| `--skip-k8s` | `SKIP_K8S=1` | Skip kubectl, Helm, eksctl |
+| `--skip-helm` | `SKIP_HELM=1` | Skip Helm only |
+| `--skip-eksctl` | `SKIP_EKSCTL=1` | Skip eksctl only |
+| `--skip-terraform` | `SKIP_TERRAFORM=1` | Skip Terraform |
+| `--skip-awscli` | `SKIP_AWSCLI=1` | Skip AWS CLI v2 |
+| `--skip-chsh` | `SKIP_CHSH=1` | Don't change the default shell to zsh |
 
 Example:
 
 ```bash
-SKIP_K8S=1 SKIP_TERRAFORM=1 ./setup.sh
+./setup.sh --skip-helm --skip-eksctl      # kubectl only
+SKIP_K8S=1 SKIP_TERRAFORM=1 ./setup.sh    # env-var form
 ```
 
 ## After running

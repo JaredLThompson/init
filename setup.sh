@@ -10,7 +10,9 @@
 #
 # Usage:
 #   ./setup.sh                 # full install
-#   SKIP_K8S=1 ./setup.sh      # skip kubectl/helm/eksctl
+#   SKIP_K8S=1 ./setup.sh      # skip kubectl + helm + eksctl
+#   SKIP_HELM=1 ./setup.sh     # skip helm only
+#   SKIP_EKSCTL=1 ./setup.sh   # skip eksctl only
 #   SKIP_TERRAFORM=1 ./setup.sh
 #   SKIP_AWSCLI=1 ./setup.sh
 #   SKIP_CHSH=1 ./setup.sh     # don't change default shell to zsh
@@ -25,6 +27,57 @@ set -euo pipefail
 log()  { printf "\n\033[1;32m==> %s\033[0m\n" "$*"; }
 warn() { printf "\n\033[1;33m[warn] %s\033[0m\n" "$*" >&2; }
 die()  { printf "\n\033[1;31m[error] %s\033[0m\n" "$*" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Usage / argument parsing
+# ---------------------------------------------------------------------------
+usage() {
+  cat <<'USAGE'
+Unified dev-box bootstrap.
+
+Detects the package manager (dnf/yum or apt) and CPU arch, then installs a
+common toolchain: zsh + oh-my-zsh, git, vim, AWS CLI v2, kubectl, helm,
+eksctl, and terraform. Idempotent: safe to re-run.
+
+USAGE:
+  ./setup.sh [options]
+
+OPTIONS:
+  -h, --help         Show this help and exit.
+      --skip-k8s     Skip kubectl, Helm, and eksctl.
+      --skip-helm    Skip Helm only.
+      --skip-eksctl  Skip eksctl only.
+      --skip-terraform
+                     Skip Terraform.
+      --skip-awscli  Skip AWS CLI v2.
+      --skip-chsh    Don't change the default shell to zsh.
+
+Each option has an equivalent environment variable (set to 1):
+  SKIP_K8S  SKIP_HELM  SKIP_EKSCTL  SKIP_TERRAFORM  SKIP_AWSCLI  SKIP_CHSH
+
+EXAMPLES:
+  ./setup.sh                              # full install
+  ./setup.sh --skip-helm --skip-eksctl    # kubectl only, no helm/eksctl
+  SKIP_K8S=1 ./setup.sh                   # env-var form
+  ./setup.sh --skip-terraform --skip-awscli
+
+Run as your normal (sudo-capable) user, NOT as root.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)        usage; exit 0 ;;
+    --skip-k8s)       SKIP_K8S=1 ;;
+    --skip-helm)      SKIP_HELM=1 ;;
+    --skip-eksctl)    SKIP_EKSCTL=1 ;;
+    --skip-terraform) SKIP_TERRAFORM=1 ;;
+    --skip-awscli)    SKIP_AWSCLI=1 ;;
+    --skip-chsh)      SKIP_CHSH=1 ;;
+    *) printf 'Unknown option: %s\n\n' "$1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
 
 # ---------------------------------------------------------------------------
 # Preconditions
@@ -181,18 +234,26 @@ if [[ "${SKIP_K8S:-0}" != "1" && "${K8S_ARCH_OK}" -eq 1 ]]; then
     "https://dl.k8s.io/release/${kver}/bin/linux/${ARCH}/kubectl"
   chmod +x "${HOME_DIR}/bin/kubectl"
 
-  log "Install Helm"
-  curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 -o /tmp/get_helm.sh
-  chmod 700 /tmp/get_helm.sh
-  /tmp/get_helm.sh
-  rm -f /tmp/get_helm.sh
+  if [[ "${SKIP_HELM:-0}" != "1" ]]; then
+    log "Install Helm"
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 -o /tmp/get_helm.sh
+    chmod 700 /tmp/get_helm.sh
+    /tmp/get_helm.sh
+    rm -f /tmp/get_helm.sh
+  else
+    log "SKIP_HELM set; skipping Helm"
+  fi
 
-  log "Install eksctl (latest)"
-  PLATFORM="$(uname -s)_${ARCH}"
-  curl -fsSLo /tmp/eksctl.tar.gz \
-    "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_${PLATFORM}.tar.gz"
-  tar -xzf /tmp/eksctl.tar.gz -C /tmp && rm -f /tmp/eksctl.tar.gz
-  sudo mv /tmp/eksctl /usr/local/bin/
+  if [[ "${SKIP_EKSCTL:-0}" != "1" ]]; then
+    log "Install eksctl (latest)"
+    PLATFORM="$(uname -s)_${ARCH}"
+    curl -fsSLo /tmp/eksctl.tar.gz \
+      "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_${PLATFORM}.tar.gz"
+    tar -xzf /tmp/eksctl.tar.gz -C /tmp && rm -f /tmp/eksctl.tar.gz
+    sudo mv /tmp/eksctl /usr/local/bin/
+  else
+    log "SKIP_EKSCTL set; skipping eksctl"
+  fi
 else
   [[ "${SKIP_K8S:-0}" == "1" ]] && log "SKIP_K8S set; skipping kubectl/helm/eksctl"
 fi
