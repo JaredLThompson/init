@@ -519,6 +519,9 @@ if [[ "$add_imds" -eq 1 ]]; then
 
 ### INIT_IMDS_START
 # Show an EC2 instance tag (console-name) in the prompt, if present.
+# The result (including an empty "no tag / not reachable" result) is cached
+# for an hour, so the prompt makes at most one IMDS probe per hour rather
+# than a blocking curl on every single prompt render.
 function get_instance_tag() {
     TAG_KEY="console-name"
     CACHE_FILE="/tmp/instance_tag_cache"
@@ -544,17 +547,17 @@ function get_instance_tag() {
         --connect-timeout 1 --max-time 2 \
         -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null)
 
-    # No token -> not reachable or IMDS disabled; do not attempt IMDSv1.
-    [ -z "$TOKEN" ] && return
-
-    TAG_VALUE=$(curl -s -f --connect-timeout 1 --max-time 2 \
-        -H "X-aws-ec2-metadata-token: $TOKEN" \
-        "http://169.254.169.254/latest/meta-data/tags/instance/$TAG_KEY" 2>/dev/null)
-
-    if [ -n "$TAG_VALUE" ]; then
-        echo "$TAG_VALUE" > "$CACHE_FILE"
-        echo "$TAG_VALUE"
+    TAG_VALUE=""
+    if [ -n "$TOKEN" ]; then
+        TAG_VALUE=$(curl -s -f --connect-timeout 1 --max-time 2 \
+            -H "X-aws-ec2-metadata-token: $TOKEN" \
+            "http://169.254.169.254/latest/meta-data/tags/instance/$TAG_KEY" 2>/dev/null)
     fi
+
+    # Cache the result either way (empty on a non-EC2 host / no tag), so we
+    # don't re-probe IMDS on every prompt. The cache expires after an hour.
+    echo "$TAG_VALUE" > "$CACHE_FILE"
+    [ -n "$TAG_VALUE" ] && echo "$TAG_VALUE"
 }
 PROMPT='$(tag=$(get_instance_tag); if [ -n "$tag" ]; then echo "%{$fg[green]%}[$tag]%{$reset_color%} "; fi)'$PROMPT
 ### INIT_IMDS_END
