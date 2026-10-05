@@ -217,12 +217,23 @@ is_ec2() {
   if [[ -r /sys/hypervisor/uuid ]] && grep -qi '^ec2' /sys/hypervisor/uuid 2>/dev/null; then
     return 0
   fi
-  # IMDS check (fast fail off-instance).
-  local token
-  token=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+  # IMDS check (fast fail off-instance). Be strict: a non-empty body is NOT
+  # enough -- captive portals, proxies, or a link-local route (e.g. WireGuard
+  # catching 169.254.0.0/16) can answer with HTML/other content. Require an
+  # HTTP 200 AND a response that actually looks like an IMDSv2 token
+  # (reasonably long, single line, no whitespace or HTML markup).
+  local token http_code tokfile
+  tokfile="$(mktemp)"
+  http_code=$(curl -s -o "$tokfile" -w '%{http_code}' \
+            -X PUT "http://169.254.169.254/latest/api/token" \
             --connect-timeout 1 --max-time 2 \
-            -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)
-  [[ -n "$token" ]]
+            -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null) || true
+  token="$(cat "$tokfile" 2>/dev/null)"
+  rm -f "$tokfile"
+  [[ "$http_code" == "200" ]] || return 1
+  # Token must be a single whitespace-free line of plausible length and must
+  # not contain '<' (would indicate an HTML error/portal page).
+  [[ "$token" =~ ^[A-Za-z0-9+/=_-]{20,}$ ]]
 }
 
 # ---------------------------------------------------------------------------
